@@ -1,10 +1,7 @@
 """Интерфейс командной строки ассемблера УВМ."""
 
 import argparse
-import os
-import stat
 import sys
-import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -14,6 +11,7 @@ from assembler import (
     encode_program,
     parse_program,
 )
+from file_output import write_output
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -37,39 +35,6 @@ def create_parser() -> argparse.ArgumentParser:
         "--fields", action="store_true", help="вывести поля команд без записи"
     )
     return parser
-
-
-def _check_destination(source: Path, output: Path) -> None:
-    """Проверить, что существующий выходной файл пригоден для замены."""
-    try:
-        destination_stat = output.stat()
-    except FileNotFoundError:
-        return
-    if not stat.S_ISREG(destination_stat.st_mode):
-        raise OSError("выходной путь должен указывать на обычный файл")
-    if os.path.samestat(source.stat(), destination_stat):
-        raise OSError("входной и выходной файлы совпадают")
-    if not os.access(output, os.W_OK):
-        raise PermissionError("выходной файл недоступен для записи")
-
-
-def _write_binary(source: Path, output: Path, code: bytes) -> None:
-    """Записать байты во временный файл и заменить выходной файл целиком."""
-    if output.is_symlink():
-        output = output.resolve()
-    _check_destination(source, output)
-
-    stream = tempfile.NamedTemporaryFile(
-        dir=output.parent, suffix=".bin", delete=False
-    )
-    temporary = Path(stream.name)
-    try:
-        with stream:
-            stream.write(code)
-        temporary.replace(output)
-    except BaseException:
-        temporary.unlink(missing_ok=True)
-        raise
 
 
 def _print_hex(code: bytes) -> None:
@@ -105,7 +70,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     code = encode_program(instructions)
     try:
-        _write_binary(args.source, args.output, code)
+        write_output(args.source, args.output, code)
     except (OSError, RuntimeError) as exc:
         print(f"Ошибка записи: {args.output}: {exc}", file=sys.stderr)
         return 1

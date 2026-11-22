@@ -1,7 +1,8 @@
 /3 praktika.pdf
 
-# Machine code and build artifacts
+# Generated output and build artifacts
 *.bin
+*.dump.json
 *.out
 *.exe
 *.o

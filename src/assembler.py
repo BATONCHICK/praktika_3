@@ -1,4 +1,4 @@
-"""Разбор CSV и кодирование команд УВМ варианта 20."""
+"""Разбор CSV и преобразование команд УВМ в машинный код и обратно."""
 
 import csv
 from collections.abc import Iterable
@@ -11,7 +11,9 @@ READ_OPCODE = 62
 WRITE_OPCODE = 53
 POPCNT_OPCODE = 36
 INSTRUCTION_SIZE = 5
+BYTE_ORDER = "little"
 OPCODE_BITS = 6
+OPCODE_MASK = (1 << OPCODE_BITS) - 1
 REGISTER_BITS = 5
 CONSTANT_BITS = 18
 OFFSET_BITS = 5
@@ -147,7 +149,7 @@ def encode_instruction(instruction: Instruction) -> bytes:
                 f"до {spec.maximum}"
             )
         packed |= value << shift
-    return packed.to_bytes(INSTRUCTION_SIZE, byteorder="little")
+    return packed.to_bytes(INSTRUCTION_SIZE, byteorder=BYTE_ORDER)
 
 
 def encode_program(instructions: Iterable[Instruction]) -> bytes:
@@ -155,3 +157,26 @@ def encode_program(instructions: Iterable[Instruction]) -> bytes:
     return b"".join(
         encode_instruction(instruction) for instruction in instructions
     )
+
+
+def decode_instruction(code: bytes) -> Instruction:
+    """Восстановить поля команды и проверить неиспользуемые биты."""
+    if len(code) != INSTRUCTION_SIZE:
+        raise AssemblyError(
+            f"размер команды должен быть {INSTRUCTION_SIZE} байт"
+        )
+
+    packed = int.from_bytes(code, byteorder=BYTE_ORDER)
+    opcode = packed & OPCODE_MASK
+    specs = SPECS_BY_OPCODE.get(opcode)
+    if specs is None:
+        raise AssemblyError(f"поле A: неизвестный код операции {opcode}")
+
+    used_bits = OPCODE_MASK
+    operands = []
+    for spec, shift in zip(specs, OPERAND_SHIFTS):
+        used_bits |= spec.maximum << shift
+        operands.append((packed >> shift) & spec.maximum)
+    if packed & ~used_bits:
+        raise AssemblyError("резервные биты команды должны быть нулевыми")
+    return Instruction(opcode, *operands)
