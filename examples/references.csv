@@ -1,0 +1,4 @@
+load,r5,532
+read,r25,r22,11
+write,r10,r23
+popcnt,r29,r12

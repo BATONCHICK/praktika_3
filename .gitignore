@@ -1,0 +1,40 @@
+/3 praktika.pdf
+
+# Machine code and build artifacts
+*.bin
+*.out
+*.exe
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+/output/
+/build/
+/dist/
+*.egg-info/
+
+# Archives
+*.zip
+*.tar
+*.gz
+*.bz2
+*.xz
+*.tgz
+*.rar
+*.7z
+*.whl
+
+# Python, editors and macOS
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.vscode/
+.idea/
+*.swp
+.DS_Store
