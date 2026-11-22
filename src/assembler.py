@@ -1,4 +1,4 @@
-"""Модель команд УВМ и трансляция CSV в промежуточное представление."""
+"""Разбор CSV и кодирование команд УВМ варианта 20."""
 
 import csv
 from collections.abc import Iterable
@@ -10,13 +10,20 @@ LOAD_OPCODE = 32
 READ_OPCODE = 62
 WRITE_OPCODE = 53
 POPCNT_OPCODE = 36
+INSTRUCTION_SIZE = 5
+OPCODE_BITS = 6
 REGISTER_BITS = 5
 CONSTANT_BITS = 18
 OFFSET_BITS = 5
+MIN_OPERAND = 0
 MAX_REGISTER = (1 << REGISTER_BITS) - 1
 MAX_CONSTANT = (1 << CONSTANT_BITS) - 1
 MAX_OFFSET = (1 << OFFSET_BITS) - 1
 OPERAND_FIELDS = ("B", "C", "D")
+OPERAND_B_SHIFT = OPCODE_BITS
+OPERAND_C_SHIFT = OPERAND_B_SHIFT + REGISTER_BITS
+OPERAND_D_SHIFT = OPERAND_C_SHIFT + REGISTER_BITS
+OPERAND_SHIFTS = (OPERAND_B_SHIFT, OPERAND_C_SHIFT, OPERAND_D_SHIFT)
 
 
 @dataclass(frozen=True)
@@ -37,7 +44,7 @@ class Instruction:
 
 
 class AssemblyError(ValueError):
-    """Ошибка синтаксиса CSV или содержания программы."""
+    """Ошибка синтаксиса CSV или недопустимая команда УВМ."""
 
 
 @dataclass(frozen=True)
@@ -57,6 +64,7 @@ COMMANDS = {
     "write": (WRITE_OPCODE, (REGISTER, REGISTER)),
     "popcnt": (POPCNT_OPCODE, (REGISTER, REGISTER)),
 }
+SPECS_BY_OPCODE = dict(COMMANDS.values())
 
 
 def _parse_operand(token: str, field: str, spec: OperandSpec) -> int:
@@ -114,3 +122,36 @@ def parse_program(lines: Iterable[str]) -> list[Instruction]:
     if not instructions:
         raise AssemblyError("во входном файле нет команд")
     return instructions
+
+
+def encode_instruction(instruction: Instruction) -> bytes:
+    """Проверить поля и упаковать команду в пять байтов little-endian."""
+    opcode = instruction.opcode
+    if type(opcode) is not int or opcode not in SPECS_BY_OPCODE:
+        raise AssemblyError(f"поле A: неизвестный код операции {opcode!r}")
+    specs = SPECS_BY_OPCODE[opcode]
+
+    operands = (instruction.operand_b, instruction.operand_c)
+    if instruction.operand_d is not None:
+        operands += (instruction.operand_d,)
+    if len(operands) != len(specs):
+        raise AssemblyError(f"поле D: неверный набор полей для кода {opcode}")
+
+    packed = opcode
+    for value, spec, field, shift in zip(
+        operands, specs, OPERAND_FIELDS, OPERAND_SHIFTS
+    ):
+        if type(value) is not int or not MIN_OPERAND <= value <= spec.maximum:
+            raise AssemblyError(
+                f"поле {field}: допустимо целое от {MIN_OPERAND} "
+                f"до {spec.maximum}"
+            )
+        packed |= value << shift
+    return packed.to_bytes(INSTRUCTION_SIZE, byteorder="little")
+
+
+def encode_program(instructions: Iterable[Instruction]) -> bytes:
+    """Объединить байты команд в порядке исходной программы."""
+    return b"".join(
+        encode_instruction(instruction) for instruction in instructions
+    )
